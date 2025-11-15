@@ -1,0 +1,20 @@
+FROM postgres:16
+
+# Install Python dan dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-psycopg2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Patroni dan etcd3
+RUN pip3 install --break-system-packages patroni[etcd3]
+
+# Create data directory with correct permissions
+RUN mkdir -p /home/postgres/data && \
+    chown -R postgres:postgres /home/postgres && \
+    chmod 700 /home/postgres/data
+
+USER postgres
+
+CMD ["patroni"]
