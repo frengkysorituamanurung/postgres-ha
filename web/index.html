@@ -691,7 +691,7 @@
                         <div class="card-content">
                             <div class="metric-card">
                                 <div class="metric-value" id="total-ops">0</div>
-                                <div class="metric-label">Total</div>
+                                <div class="metric-label">Total Ops</div>
                             </div>
                         </div>
                     </div>
@@ -700,8 +700,8 @@
                         <h2>🎯 Avail</h2>
                         <div class="card-content">
                             <div class="metric-card">
-                                <div class="metric-value" id="availability">100%</div>
-                                <div class="metric-label">Rate</div>
+                                <div class="metric-value" id="availability">-</div>
+                                <div class="metric-label">Realtime Rate</div>
                             </div>
                         </div>
                     </div>
@@ -730,6 +730,10 @@
                                 <span class="stat-label">Failed:</span>
                                 <span class="stat-value error" id="write-failed">0</span>
                             </div>
+                            <div class="stat">
+                                <span class="stat-label">Success Rate:</span>
+                                <span class="stat-value" id="write-rate">100.00%</span>
+                            </div>
                         </div>
                     </div>
 
@@ -748,6 +752,29 @@
                                 <span class="stat-label">Failed:</span>
                                 <span class="stat-value error" id="read-failed">0</span>
                             </div>
+                            <div class="stat">
+                                <span class="stat-label">Success Rate:</span>
+                                <span class="stat-value" id="read-rate">100.00%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Failover Stats -->
+                <div class="card fade-in">
+                    <h2>🔄 Failover Impact</h2>
+                    <div class="card-content">
+                        <div class="stat">
+                            <span class="stat-label">Failover Count:</span>
+                            <span class="stat-value" id="reconnect-count" style="color: #f0883e;">0</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Current Node:</span>
+                            <span class="stat-value" id="current-node">-</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Total Failed Ops:</span>
+                            <span class="stat-value error" id="total-failed">0</span>
                         </div>
                     </div>
                 </div>

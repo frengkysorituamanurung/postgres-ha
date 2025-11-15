@@ -17,9 +17,20 @@ const stats = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    // Initial stats display - show 0 ops, no availability yet
+    updateStatsDisplay();
+    
+    // Set initial availability to show it's calculated from real data
+    document.getElementById('availability').textContent = 'No data';
+    document.getElementById('availability').style.color = '#8b949e';
+    
+    // Load cluster status
     loadClusterStatus();
     setInterval(loadClusterStatus, 5000); // Update every 5 seconds
+    
     addLog('System initialized', 'info');
+    addLog('Waiting for test to start...', 'info');
+    addLog('Availability will be calculated from actual operations', 'info');
 });
 
 // Load cluster status
@@ -104,8 +115,21 @@ async function startTest() {
     document.getElementById('start-btn').disabled = true;
     document.getElementById('stop-btn').disabled = false;
     
+    // Reset stats for fresh start
+    stats.writeTotal = 0;
+    stats.writeSuccess = 0;
+    stats.writeFailed = 0;
+    stats.readTotal = 0;
+    stats.readSuccess = 0;
+    stats.readFailed = 0;
+    stats.reconnects = 0;
+    stats.currentNode = null;
+    
+    // Update display immediately
+    updateStatsDisplay();
+    
     showAlert('Test started! Writing and reading data every 2 seconds...', 'success');
-    addLog('Test started', 'success');
+    addLog('Test started - stats reset', 'success');
     
     // Start operations
     testInterval = setInterval(async () => {
@@ -142,6 +166,7 @@ function stopTest() {
 // Perform write operation
 async function performWrite() {
     stats.writeTotal++;
+    const startTime = Date.now();
     
     try {
         const response = await fetch('/api/db/write', {
@@ -153,46 +178,79 @@ async function performWrite() {
         });
         
         const data = await response.json();
+        const duration = Date.now() - startTime;
         
         if (data.success) {
             stats.writeSuccess++;
-            addLog(`✓ Write successful to ${data.node}`, 'success');
+            addLog(`✓ Write OK (${duration}ms) → ${data.node}`, 'success');
             
             // Check for failover
             if (stats.currentNode && stats.currentNode !== data.node) {
-                showAlert(`🔄 FAILOVER DETECTED! Old: ${stats.currentNode}, New: ${data.node}`, 'warning');
+                showAlert(`🔄 FAILOVER DETECTED! ${stats.currentNode} → ${data.node}`, 'warning');
                 addLog(`🔄 FAILOVER: ${stats.currentNode} → ${data.node}`, 'warning');
                 stats.reconnects++;
+                
+                // Calculate availability after failover
+                const totalOps = stats.writeTotal + stats.readTotal;
+                const successOps = stats.writeSuccess + stats.readSuccess;
+                const currentAvailability = ((successOps / totalOps) * 100).toFixed(2);
+                addLog(`📊 Current Availability: ${currentAvailability}%`, 'info');
             }
             stats.currentNode = data.node;
         } else {
             stats.writeFailed++;
-            addLog(`✗ Write failed: ${data.error}`, 'error');
+            addLog(`✗ Write FAILED: ${data.error}`, 'error');
+            
+            // Log availability impact
+            const totalOps = stats.writeTotal + stats.readTotal;
+            const successOps = stats.writeSuccess + stats.readSuccess;
+            const currentAvailability = ((successOps / totalOps) * 100).toFixed(2);
+            addLog(`📉 Availability dropped to ${currentAvailability}%`, 'error');
         }
     } catch (error) {
         stats.writeFailed++;
-        addLog(`✗ Write error: ${error.message}`, 'error');
+        addLog(`✗ Write ERROR: ${error.message}`, 'error');
+        
+        // Log availability impact
+        const totalOps = stats.writeTotal + stats.readTotal;
+        const successOps = stats.writeSuccess + stats.readSuccess;
+        const currentAvailability = ((successOps / totalOps) * 100).toFixed(2);
+        addLog(`📉 Availability: ${currentAvailability}% (connection error)`, 'error');
     }
 }
 
 // Perform read operation
 async function performRead() {
     stats.readTotal++;
+    const startTime = Date.now();
     
     try {
         const response = await fetch('/api/db/read');
         const data = await response.json();
+        const duration = Date.now() - startTime;
         
         if (data.success) {
             stats.readSuccess++;
-            addLog(`✓ Read successful: ${data.count} records`, 'success');
+            addLog(`✓ Read OK (${duration}ms): ${data.count} records`, 'success');
         } else {
             stats.readFailed++;
-            addLog(`✗ Read failed: ${data.error}`, 'error');
+            addLog(`✗ Read FAILED: ${data.error}`, 'error');
+            
+            // Log availability impact
+            const totalOps = stats.writeTotal + stats.readTotal;
+            const successOps = stats.writeSuccess + stats.readSuccess;
+            const currentAvailability = ((successOps / totalOps) * 100).toFixed(2);
+            addLog(`📉 Availability dropped to ${currentAvailability}%`, 'error');
         }
     } catch (error) {
         stats.readFailed++;
-        addLog(`✗ Read error: ${error.message}`, 'error');
+        addLog(`✗ Read ERROR: ${error.message}`, 'error');
+        
+        // Log availability impact
+        const totalOps = stats.writeTotal + stats.readTotal;
+        const successOps = stats.writeSuccess + stats.readSuccess;
+        const currentAvailability = ((successOps / totalOps) * 100).toFixed(2);
+        addLog(`📉 Availability: ${currentAvailability}% (connection error)`, 'error');
     }
 }
 
@@ -238,32 +296,65 @@ function updateStatsDisplay() {
     document.getElementById('write-success').textContent = stats.writeSuccess;
     document.getElementById('write-failed').textContent = stats.writeFailed;
     
+    // Calculate write success rate
+    let writeRate = '100.00';
+    if (stats.writeTotal > 0) {
+        writeRate = ((stats.writeSuccess / stats.writeTotal) * 100).toFixed(2);
+    }
+    document.getElementById('write-rate').textContent = writeRate + '%';
+    
     // Read stats
     document.getElementById('read-total').textContent = stats.readTotal;
     document.getElementById('read-success').textContent = stats.readSuccess;
     document.getElementById('read-failed').textContent = stats.readFailed;
+    
+    // Calculate read success rate
+    let readRate = '100.00';
+    if (stats.readTotal > 0) {
+        readRate = ((stats.readSuccess / stats.readTotal) * 100).toFixed(2);
+    }
+    document.getElementById('read-rate').textContent = readRate + '%';
+    
+    // Reconnect/Failover count
+    document.getElementById('reconnect-count').textContent = stats.reconnects;
+    
+    // Current node
+    document.getElementById('current-node').textContent = stats.currentNode || '-';
+    
+    // Total failed operations
+    const totalFailed = stats.writeFailed + stats.readFailed;
+    document.getElementById('total-failed').textContent = totalFailed;
     
     // Total operations
     const totalOps = stats.writeTotal + stats.readTotal;
     const successOps = stats.writeSuccess + stats.readSuccess;
     document.getElementById('total-ops').textContent = totalOps;
     
-    // Success rate
-    const successRate = totalOps > 0 ? (successOps / totalOps * 100).toFixed(1) : 100;
-    document.getElementById('success-rate').style.width = successRate + '%';
-    document.getElementById('success-rate').textContent = successRate + '%';
-    
-    // Availability
-    document.getElementById('availability').textContent = successRate + '%';
-    
-    // Update availability color
+    // Calculate real-time availability rate
     const availabilityEl = document.getElementById('availability');
-    if (successRate >= 99.9) {
-        availabilityEl.style.color = '#10b981';
-    } else if (successRate >= 99.0) {
-        availabilityEl.style.color = '#f59e0b';
+    
+    if (totalOps === 0) {
+        // No operations yet - show "No data"
+        availabilityEl.textContent = 'No data';
+        availabilityEl.style.color = '#8b949e';
     } else {
-        availabilityEl.style.color = '#ef4444';
+        // Calculate from actual operations
+        const availabilityRate = ((successOps / totalOps) * 100).toFixed(2);
+        const rate = parseFloat(availabilityRate);
+        
+        // Update availability display with real-time calculation
+        availabilityEl.textContent = availabilityRate + '%';
+        
+        // Update availability color based on real-time rate
+        if (rate >= 99.9) {
+            availabilityEl.style.color = '#7ee787'; // Green - Excellent (99.9%+)
+        } else if (rate >= 99.0) {
+            availabilityEl.style.color = '#58a6ff'; // Blue - Very Good (99.0-99.9%)
+        } else if (rate >= 95.0) {
+            availabilityEl.style.color = '#f0883e'; // Orange - Acceptable (95.0-99.0%)
+        } else {
+            availabilityEl.style.color = '#f85149'; // Red - Poor (<95%)
+        }
     }
 }
 
