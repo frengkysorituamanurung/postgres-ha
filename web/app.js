@@ -125,20 +125,20 @@ async function startTest() {
     stats.reconnects = 0;
     stats.currentNode = null;
     
-    // Update display immediately
+    // Update display immediately to show reset
     updateStatsDisplay();
     
     showAlert('Test started! Writing and reading data every 2 seconds...', 'success');
-    addLog('Test started - stats reset', 'success');
+    addLog('Test started - all stats reset to 0', 'success');
+    addLog('Availability will be calculated from operations', 'info');
     
-    // Start operations
+    // Start operations - perform both write and read, then update display
     testInterval = setInterval(async () => {
         await performWrite();
         await performRead();
+        // Update display after both operations complete
+        updateStatsDisplay();
     }, 2000);
-    
-    // Update stats display
-    statsInterval = setInterval(updateStatsDisplay, 1000);
 }
 
 // Stop test
@@ -154,13 +154,16 @@ function stopTest() {
         testInterval = null;
     }
     
-    if (statsInterval) {
-        clearInterval(statsInterval);
-        statsInterval = null;
-    }
+    // Final stats update
+    updateStatsDisplay();
+    
+    const totalOps = stats.writeTotal + stats.readTotal;
+    const successOps = stats.writeSuccess + stats.readSuccess;
+    const finalAvailability = totalOps > 0 ? ((successOps / totalOps) * 100).toFixed(2) : 'N/A';
     
     showAlert('Test stopped', 'info');
     addLog('Test stopped', 'info');
+    addLog(`Final Stats: ${totalOps} ops, ${finalAvailability}% availability`, 'info');
 }
 
 // Perform write operation
@@ -189,33 +192,15 @@ async function performWrite() {
                 showAlert(`🔄 FAILOVER DETECTED! ${stats.currentNode} → ${data.node}`, 'warning');
                 addLog(`🔄 FAILOVER: ${stats.currentNode} → ${data.node}`, 'warning');
                 stats.reconnects++;
-                
-                // Calculate availability after failover
-                const totalOps = stats.writeTotal + stats.readTotal;
-                const successOps = stats.writeSuccess + stats.readSuccess;
-                const currentAvailability = ((successOps / totalOps) * 100).toFixed(2);
-                addLog(`📊 Current Availability: ${currentAvailability}%`, 'info');
             }
             stats.currentNode = data.node;
         } else {
             stats.writeFailed++;
             addLog(`✗ Write FAILED: ${data.error}`, 'error');
-            
-            // Log availability impact
-            const totalOps = stats.writeTotal + stats.readTotal;
-            const successOps = stats.writeSuccess + stats.readSuccess;
-            const currentAvailability = ((successOps / totalOps) * 100).toFixed(2);
-            addLog(`📉 Availability dropped to ${currentAvailability}%`, 'error');
         }
     } catch (error) {
         stats.writeFailed++;
         addLog(`✗ Write ERROR: ${error.message}`, 'error');
-        
-        // Log availability impact
-        const totalOps = stats.writeTotal + stats.readTotal;
-        const successOps = stats.writeSuccess + stats.readSuccess;
-        const currentAvailability = ((successOps / totalOps) * 100).toFixed(2);
-        addLog(`📉 Availability: ${currentAvailability}% (connection error)`, 'error');
     }
 }
 
@@ -235,22 +220,10 @@ async function performRead() {
         } else {
             stats.readFailed++;
             addLog(`✗ Read FAILED: ${data.error}`, 'error');
-            
-            // Log availability impact
-            const totalOps = stats.writeTotal + stats.readTotal;
-            const successOps = stats.writeSuccess + stats.readSuccess;
-            const currentAvailability = ((successOps / totalOps) * 100).toFixed(2);
-            addLog(`📉 Availability dropped to ${currentAvailability}%`, 'error');
         }
     } catch (error) {
         stats.readFailed++;
         addLog(`✗ Read ERROR: ${error.message}`, 'error');
-        
-        // Log availability impact
-        const totalOps = stats.writeTotal + stats.readTotal;
-        const successOps = stats.writeSuccess + stats.readSuccess;
-        const currentAvailability = ((successOps / totalOps) * 100).toFixed(2);
-        addLog(`📉 Availability: ${currentAvailability}% (connection error)`, 'error');
     }
 }
 
@@ -288,6 +261,9 @@ async function simulateFailover() {
         document.getElementById('failover-btn').disabled = false;
     }
 }
+
+// Track previous availability for change detection
+let previousAvailability = null;
 
 // Update stats display
 function updateStatsDisplay() {
@@ -337,6 +313,7 @@ function updateStatsDisplay() {
         // No operations yet - show "No data"
         availabilityEl.textContent = 'No data';
         availabilityEl.style.color = '#8b949e';
+        previousAvailability = null;
     } else {
         // Calculate from actual operations
         const availabilityRate = ((successOps / totalOps) * 100).toFixed(2);
@@ -345,15 +322,22 @@ function updateStatsDisplay() {
         // Update availability display with real-time calculation
         availabilityEl.textContent = availabilityRate + '%';
         
+        // Log availability changes when there are failures
+        if (totalFailed > 0 && previousAvailability !== null) {
+            const change = Math.abs(rate - previousAvailability);
+            if (change >= 0.5) { // Log only if change is >= 0.5%
+                addLog(`📊 Availability: ${availabilityRate}% (${successOps}/${totalOps} ops)`, 'warning');
+            }
+        }
+        previousAvailability = rate;
+        
         // Update availability color based on real-time rate
-        if (rate >= 99.9) {
-            availabilityEl.style.color = '#7ee787'; // Green - Excellent (99.9%+)
-        } else if (rate >= 99.0) {
-            availabilityEl.style.color = '#58a6ff'; // Blue - Very Good (99.0-99.9%)
-        } else if (rate >= 95.0) {
-            availabilityEl.style.color = '#f0883e'; // Orange - Acceptable (95.0-99.0%)
+        if (rate >= 95.0) {
+            availabilityEl.style.color = '#7ee787'; // Green - Good (95%+)
+        } else if (rate >= 90.0) {
+            availabilityEl.style.color = '#f0883e'; // Orange - Acceptable (90-95%)
         } else {
-            availabilityEl.style.color = '#f85149'; // Red - Poor (<95%)
+            availabilityEl.style.color = '#f85149'; // Red - Poor (<90%)
         }
     }
 }
